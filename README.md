@@ -60,7 +60,7 @@ agl_meta-agl-app-store/
 source agl-init-build-env
 ```
 
-### 2. Add this layer and required dependencies
+### 2. Add this layer to `bblayers.conf`
 
 ```bash
 # These may already be included in your AGL config
@@ -73,19 +73,36 @@ bitbake-layers add-layer ../meta-openembedded/meta-networking
 bitbake-layers add-layer ../meta-agl-app-store
 ```
 
-### 3. Configure `local.conf`
+Or add directly in `bblayers.conf`:
 
-Add the following to your `local.conf`:
+```
+BBLAYERS += "/path/to/agl_meta-agl-app-store"
+```
+
+### 3. Add to your image (e.g., `local.conf`)
 
 ```bash
-# Option A: Use the provided distro include (recommended)
-include conf/distro/include/agl-app-store-flatpak.inc
-
-# Option B: Manual configuration
-# IMAGE_INSTALL:append = " flatpak agl-app-store"
-# IMAGE_ROOTFS_EXTRA_SPACE:append = " + 4000000"
-# DISTRO_FEATURES:append = " wayland seccomp"
+# Include the App Store + full Flatpak runtime
+IMAGE_INSTALL:append = " agl-app-store"
 ```
+
+This automatically pulls in:
+- The Flutter app store client
+- `packagegroup-flatpak` (flatpak, ostree, gnupg, ca-certificates, glib-networking)
+- `flatpak-predefined-repos` (first-boot systemd service that adds PENSHub + Flathub)
+
+### 4. (Optional) Use the distro include for full Flatpak config
+
+For additional Flatpak configuration (extra rootfs space, distro features), add to `local.conf`:
+
+```bash
+include conf/distro/include/agl-app-store-flatpak.inc
+```
+
+This sets:
+- `IMAGE_INSTALL:append = " flatpak agl-app-store"`
+- `IMAGE_ROOTFS_EXTRA_SPACE:append = " + 4000000"` (4GB for apps/runtimes)
+- `DISTRO_FEATURES:append = " wayland seccomp"`
 
 ### 4. Build
 
