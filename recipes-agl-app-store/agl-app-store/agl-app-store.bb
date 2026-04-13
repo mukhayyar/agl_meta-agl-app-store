@@ -23,6 +23,7 @@ inherit agl-app flutter-app
 
 # ── Flutter configuration ────────────────────────────────────
 PUBSPEC_APPNAME = "agl_app_store"
+PUBSPEC_IGNORE_LOCKFILE = "1"
 FLUTTER_APPLICATION_INSTALL_PREFIX = "/usr/share/flutter"
 FLUTTER_BUILD_ARGS = "bundle -v"
 

@@ -4,6 +4,9 @@
 # Include this in local.conf to enable Flatpak support for the
 # AGL App Store. Based on meta-flatpak/AGL branch guidelines.
 #
+# Prerequisites in bblayers.conf:
+#   BBLAYERS += "${METADIR}/external/meta-openembedded/meta-gnome"
+#
 # Usage in local.conf:
 #   include conf/distro/include/agl-app-store-flatpak.inc
 # ============================================================

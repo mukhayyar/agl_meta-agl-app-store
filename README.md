@@ -62,36 +62,17 @@ source agl-init-build-env
 
 ### 2. Add this layer to `bblayers.conf`
 
-```bash
-# These may already be included in your AGL config
-bitbake-layers add-layer ../meta-openembedded/meta-oe
-bitbake-layers add-layer ../meta-openembedded/meta-gnome
-bitbake-layers add-layer ../meta-openembedded/meta-filesystems
-bitbake-layers add-layer ../meta-openembedded/meta-networking
+Add directly in `bblayers.conf`:
+
+```
+# Required: meta-gnome provides dconf (dependency of flatpak)
+BBLAYERS += "${METADIR}/external/meta-openembedded/meta-gnome"
 
 # Add our layer
-bitbake-layers add-layer ../meta-agl-app-store
+BBLAYERS += "${METADIR}/external/meta-agl-app-store"
 ```
 
-Or add directly in `bblayers.conf`:
-
-```
-BBLAYERS += "/path/to/agl_meta-agl-app-store"
-```
-
-### 3. Add to your image (e.g., `local.conf`)
-
-```bash
-# Include the App Store + full Flatpak runtime
-IMAGE_INSTALL:append = " agl-app-store"
-```
-
-This automatically pulls in:
-- The Flutter app store client
-- `packagegroup-flatpak` (flatpak, ostree, gnupg, ca-certificates, glib-networking)
-- `flatpak-predefined-repos` (first-boot systemd service that adds PENSHub + Flathub)
-
-### 4. (Optional) Use the distro include for full Flatpak config
+### 3. (Optional) Use the distro include for full Flatpak config
 
 For additional Flatpak configuration (extra rootfs space, distro features), add to `local.conf`:
 
