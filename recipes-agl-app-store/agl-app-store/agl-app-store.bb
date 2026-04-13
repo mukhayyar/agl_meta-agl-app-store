@@ -12,7 +12,7 @@ SECTION = "graphics"
 
 PN = "agl-app-store"
 
-SRC_URI = "git://github.com/mukhayyar/agl-app-store.git;protocol=https;branch=main \
+SRC_URI = "gitsm://github.com/mukhayyar/agl-app-store.git;protocol=https;branch=main \
            file://agl-app-flutter@agl-app-store.service \
            "
 SRCREV = "${AUTOREV}"
