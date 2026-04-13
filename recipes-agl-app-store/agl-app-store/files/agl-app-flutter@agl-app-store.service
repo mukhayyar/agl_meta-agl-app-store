@@ -1,0 +1,17 @@
+[Unit]
+Description=AGL PENS App Store (Flutter)
+After=multi-user.target agl-compositor.service
+Wants=agl-compositor.service
+
+[Service]
+Type=simple
+# %i is the app-id passed via the template instantiation
+ExecStart=/usr/bin/flutter-auto --b=/usr/share/flutter/agl_app_store --f
+Restart=on-failure
+RestartSec=5
+Environment=HOME=/var
+Environment=XDG_RUNTIME_DIR=/run/user/1001
+Environment=WAYLAND_DISPLAY=wayland-1
+
+[Install]
+WantedBy=multi-user.target
