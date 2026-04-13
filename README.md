@@ -1,118 +1,152 @@
 # meta-agl-app-store
 
-Yocto/BitBake meta layer for the **AGL PENS App Store** — a Flutter-based embedded application store for Automotive Grade Linux (AGL) with integrated Flatpak support.
+Yocto/BitBake meta layer for the **AGL PENS App Store** — a Flutter-based embedded application store for Automotive Grade Linux (AGL) with Flatpak support.
+
+Based on the [meta-flatpak AGL integration guide](https://github.com/flatpak/meta-flatpak/blob/AGL/AGL.md).
 
 ## Overview
 
-This layer provides everything needed to build and deploy the AGL App Store into an AGL Yocto image:
+This layer provides:
 
 1. **Flutter App Store recipe** (`agl-app-store.bb`) — builds the [AGL App Store](https://github.com/mukhayyar/agl-app-store) Flutter embedded client
-2. **Flatpak runtime support** (`packagegroup-flatpak.bb`) — pulls in Flatpak, OSTree, GPG, and CA certificates
-3. **Flatpak bbappend** — tunes Flatpak build flags for AGL embedded (disables systemd-helper, seccomp, SELinux)
-4. **Pre-configured repositories** (`flatpak-predefined-repos.bb`) — registers **PENSHub** and **Flathub** as system remotes on first boot
+2. **Flatpak packagegroup** (`packagegroup-flatpak.bb`) — pulls in flatpak, ostree, gnupg, ca-certificates
+3. **Pre-configured repositories** (`flatpak-predefined-repos.bb`) — registers **PENSHub** and **Flathub** on first boot with GPG verification
+4. **Platform integration** (`packagegroup-agl-demo-platform-flutter.bbappend`) — adds the app to the AGL IVI homescreen
+5. **Distro include** (`agl-app-store-flatpak.inc`) — configures distro features and rootfs space for Flatpak
 
 ## Directory Structure
 
 ```
 agl_meta-agl-app-store/
-├── README.md
 ├── conf/
-│   └── layer.conf                          # Layer configuration + Flatpak variables
-├── classes/                                # (reserved for future bbclasses)
+│   ├── layer.conf
+│   └── distro/include/
+│       └── agl-app-store-flatpak.inc       # Include in local.conf for Flatpak support
 ├── recipes-agl-app-store/
 │   └── agl-app-store/
-│       └── agl-app-store.bb               # Flutter app store recipe
+│       ├── agl-app-store.bb                # Flutter app store recipe
+│       └── files/
+│           └── agl-app-flutter@agl-app-store.service  # Systemd service for IVI
 ├── recipes-core/
 │   └── packagegroups/
-│       └── packagegroup-flatpak.bb        # Flatpak + OSTree + deps
-└── recipes-flatpak/
-    ├── flatpak/
-    │   ├── flatpak_%.bbappend             # Generic Flatpak tweaks
-    │   └── flatpak_1.14.%.bbappend        # Version-specific AGL tweaks
-    ├── flatpak-predefined-repos/
-    │   ├── flatpak-predefined-repos.bb    # First-boot repo setup service
-    │   └── files/
-    │       └── setup-flatpak-repos.sh     # Registers PENSHub + Flathub
-    └── ostree/                             # (bbappend if needed)
+│       └── packagegroup-flatpak.bb         # Flatpak + OSTree + deps
+├── recipes-flatpak/
+│   └── flatpak-predefined-repos/
+│       ├── flatpak-predefined-repos.bb     # First-boot repo setup service
+│       └── files/
+│           └── setup-flatpak-repos.sh      # Registers PENSHub + Flathub with GPG
+└── recipes-platform/
+    └── packagegroups/
+        └── packagegroup-agl-demo-platform-flutter.bbappend  # Adds app to IVI
 ```
 
 ## Layer Dependencies
 
-| Layer | Purpose | Repository |
-|---|---|---|
-| `meta-flutter` | Flutter embedder + `flutter-app` class | [meta-flutter](https://github.com/pomerium/meta-flutter) |
-| `meta-app-framework` | AGL app framework (`agl-app` class) | Part of AGL layers |
-| `meta-oe` | Provides base `flatpak` and `ostree` recipes | [meta-openembedded](https://github.com/openembedded/meta-openembedded) |
+| Layer | Purpose |
+|---|---|
+| `meta-flutter` | Flutter embedder + `flutter-app` class |
+| `meta-app-framework` | AGL app framework (`agl-app` class) |
+| `meta-oe` | Provides base `flatpak` and `ostree` recipes |
 
-> **Note:** This layer does **not** bundle its own `flatpak_git.bb` or `ostree_git.bb` recipes.
-> It relies on the base recipes from `meta-oe` (or the official `meta-flatpak` if available)
-> and applies bbappend files to tune them for AGL.
+> **Note:** This layer does **not** bundle its own `flatpak_git.bb` or `ostree_git.bb`.
+> It relies on the base Flatpak recipe from `meta-oe` (or the official `meta-flatpak`
+> layer if you use it). No bbappend files for flatpak are needed.
 
 ## Setup
 
-### 1. Add this layer to `bblayers.conf`
+### 1. Gather AGL sources and set up build environment
 
 ```bash
-BBLAYERS += "/path/to/agl_meta-agl-app-store"
+source agl-init-build-env
 ```
 
-### 2. Add to your image (e.g., `local.conf`)
+### 2. Add this layer and required dependencies
 
 ```bash
-# Include the App Store + full Flatpak runtime
-IMAGE_INSTALL:append = " agl-app-store"
+# These may already be included in your AGL config
+bitbake-layers add-layer ../meta-openembedded/meta-oe
+bitbake-layers add-layer ../meta-openembedded/meta-gnome
+bitbake-layers add-layer ../meta-openembedded/meta-filesystems
+bitbake-layers add-layer ../meta-openembedded/meta-networking
+
+# Add our layer
+bitbake-layers add-layer ../meta-agl-app-store
 ```
 
-This automatically pulls in:
-- The Flutter app store client
-- `packagegroup-flatpak` (flatpak, ostree, gnupg, ca-certificates, glib-networking)
-- `flatpak-predefined-repos` (first-boot systemd service that adds PENSHub + Flathub)
+### 3. Configure `local.conf`
 
-### 3. Build
+Add the following to your `local.conf`:
 
 ```bash
+# Option A: Use the provided distro include (recommended)
+include conf/distro/include/agl-app-store-flatpak.inc
+
+# Option B: Manual configuration
+# IMAGE_INSTALL:append = " flatpak agl-app-store"
+# IMAGE_ROOTFS_EXTRA_SPACE:append = " + 4000000"
+# DISTRO_FEATURES:append = " wayland seccomp"
+```
+
+### 4. Build
+
+```bash
+# Build just the app store recipe
 bitbake agl-app-store
+
+# Build the full AGL IVI image
+bitbake agl-ivi-demo-flutter
 ```
 
-### 4. (Optional) Full image build
+### 5. Run with QEMU
 
 ```bash
-bitbake agl-image-flutter
+runqemu kvm serialstdio slirp publicvnc
 ```
 
 ## Flatpak Repositories
 
-On first boot, the device automatically configures two Flatpak remotes:
+On first boot, the device configures two Flatpak remotes:
 
-| Remote | URL | Description |
+| Remote | URL | GPG |
 |---|---|---|
-| **penshub** | `https://repo.agl-store.cyou` | PENS private app repository (130 GTK4 apps) |
-| **flathub** | `https://dl.flathub.org/repo` | Public community Flatpak repository |
+| **penshub** | `https://repo.agl-store.cyou` | Key fetched from `/public.gpg` |
+| **flathub** | `https://dl.flathub.org/repo` | Bundled with Flatpak |
 
 The `org.gnome.Platform//46` shared runtime is also installed from Flathub if network is available.
 
-## Configuration Variables
+## Security & GPG Verification
 
-Set these in `local.conf` to override defaults:
+The PENSHub remote is added **with GPG verification enabled**. On first boot:
+1. The setup script fetches the GPG public key from `https://repo.agl-store.cyou/public.gpg`
+2. Imports it via `flatpak remote-add --gpg-import=<keyring>`
+3. If the key fetch fails (no network), setup is deferred to the next boot
+
+No `--no-gpg-verify` is used.
+
+## Testing Flatpak on the image
+
+After booting, verify Flatpak works via SSH or serial:
 
 ```bash
-# Flatpak system installation directory
-FLATPAK_SYSTEM_DIR = "/var/lib/flatpak"
+# Check remotes are configured
+flatpak remote-list --system
 
-# GPG signing identity for PENSHub
-FLATPAK_GPGDIR = "${TOPDIR}/gpg"
-FLATPAK_GPGID  = "pens-agl-store-signing@key"
+# List available apps from PENSHub
+flatpak remote-ls --system penshub
 
-# Repository URLs
-FLATPAK_PENSHUB_URL = "https://repo.agl-store.cyou"
-FLATPAK_FLATHUB_URL = "https://dl.flathub.org/repo"
+# Install an app from PENSHub
+flatpak install --system penshub com.pens.Calculator
+
+# Run it
+flatpak run com.pens.Calculator
 ```
 
 ## Production Notes
 
 - Pin `SRCREV` in `agl-app-store.bb` to a specific commit hash for reproducible builds
-- Replace `--no-gpg-verify` in `setup-flatpak-repos.sh` with your GPG public key for PENSHub
-- The Flatpak bbappend disables `seccomp` and `systemd-helper` for minimal embedded footprint
+- Adjust `IMAGE_ROOTFS_EXTRA_SPACE` based on target storage (4GB default)
+- Wayland apps from Flathub work out of the box with AGL compositor
+- Qt apps from Flathub need: `flatpak run --env=QT_QPA_PLATFORM=wayland <app-id>`
 
 ## Compatible AGL Version
 
