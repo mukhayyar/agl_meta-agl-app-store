@@ -1,17 +1,30 @@
 [Unit]
 Description=AGL PENS App Store (Flutter)
-After=multi-user.target agl-compositor.service
-Wants=agl-compositor.service
+After=multi-user.target agl-compositor.service network-online.target
+Wants=agl-compositor.service network-online.target
 
 [Service]
 Type=simple
-# %i is the app-id passed via the template instantiation
 ExecStart=/usr/bin/flutter-auto --b=/usr/share/flutter/agl_app_store --f
 Restart=on-failure
 RestartSec=5
+
+# PATH — dart:io Process.run needs to find flatpak, systemctl, wget, curl, etc.
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Wayland display for AGL compositor
 Environment=HOME=/var
 Environment=XDG_RUNTIME_DIR=/run/user/1001
 Environment=WAYLAND_DISPLAY=wayland-1
+
+# Flatpak — system-wide app visibility (so `flatpak list` finds everything)
+Environment=XDG_DATA_DIRS=/var/lib/flatpak/exports/share:/usr/local/share:/usr/share
+Environment=FLATPAK_SYSTEM_DIR=/var/lib/flatpak
+
+# Network / HTTPS — dart:io HttpClient needs these to resolve DNS and validate TLS
+Environment=SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+Environment=SSL_CERT_DIR=/etc/ssl/certs
+Environment=CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 
 [Install]
 WantedBy=multi-user.target
