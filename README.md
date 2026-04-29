@@ -108,7 +108,7 @@ On first boot, the device configures two Flatpak remotes:
 | Remote | URL | GPG |
 |---|---|---|
 | **penshub** | `https://repo.agl-store.cyou` | Key fetched from `/public.gpg` |
-| **flathub** | `https://dl.flathub.org/repo` | Bundled with Flatpak |
+| **flathub** | `https://dl.flathub.org/repo/flathub.flatpakrepo` | Key embedded in the `.flatpakrepo` file |
 
 The `org.gnome.Platform//46` shared runtime is also installed from Flathub if network is available.
 

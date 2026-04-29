@@ -9,33 +9,32 @@
 set -e
 
 PENSHUB_URL="https://repo.agl-store.cyou"
-PENSHUB_GPG_URL="${PENSHUB_URL}/public.gpg"
-FLATHUB_URL="https://dl.flathub.org/repo"
-GPG_KEYRING="/var/lib/flatpak/penshub-keyring.gpg"
+# Use Flathub's .flatpakrepo file (NOT the bare /repo URL). The
+# .flatpakrepo is a small INI file that carries the official GPG key
+# inline, so `flatpak remote-add` registers flathub as GPG-verified.
+# Passing the bare /repo URL here creates a non-verified remote, which
+# makes every later `flatpak install` fail with:
+#   "Can't pull from untrusted non-gpg verified remote"
+FLATHUB_URL="https://dl.flathub.org/repo/flathub.flatpakrepo"
+# PENSHub's GPG public key is baked into the image by the
+# flatpak-predefined-repos recipe, so no network fetch is required.
+PENSHUB_GPG_KEY="/usr/share/flatpak-predefined-repos/penshub-public.gpg"
 
 echo "[flatpak-repos] Configuring Flatpak remote repositories..."
 
 # ── PENSHub (PENS AGL App Store repository) ──────────────────
-# The GPG public key is served by the OSTree repo at /public.gpg
-# We fetch it and pass it to flatpak remote-add for verification
+# Use the GPG public key shipped with the image. Fetching at runtime
+# was unreliable: a failed download left penshub registered as a
+# non-verified remote and every install of a penshub app failed.
 if ! flatpak remote-list --system | grep -q "penshub"; then
-    echo "[flatpak-repos] Fetching PENSHub GPG public key from ${PENSHUB_GPG_URL}..."
-    GPG_FETCHED=0
-    if command -v wget >/dev/null 2>&1; then
-        wget -q -O "${GPG_KEYRING}" "${PENSHUB_GPG_URL}" && GPG_FETCHED=1
-    elif command -v curl >/dev/null 2>&1; then
-        curl -sfL -o "${GPG_KEYRING}" "${PENSHUB_GPG_URL}" && GPG_FETCHED=1
-    fi
-
-    if [ "${GPG_FETCHED}" = "1" ] && [ -s "${GPG_KEYRING}" ]; then
-        echo "[flatpak-repos] GPG key fetched. Adding PENSHub remote with GPG verification..."
+    if [ -s "${PENSHUB_GPG_KEY}" ]; then
+        echo "[flatpak-repos] Adding PENSHub remote with bundled GPG key..."
         flatpak remote-add --system --if-not-exists \
-            --gpg-import="${GPG_KEYRING}" \
+            --gpg-import="${PENSHUB_GPG_KEY}" \
             penshub "${PENSHUB_URL}"
         echo "[flatpak-repos] PENSHub remote added with GPG verification enabled."
     else
-        echo "[flatpak-repos] ERROR: Could not fetch GPG key. Skipping PENSHub."
-        echo "[flatpak-repos] Will retry on next boot."
+        echo "[flatpak-repos] ERROR: Bundled GPG key missing at ${PENSHUB_GPG_KEY}. Skipping PENSHub."
         rm -f /var/lib/flatpak/.repos-configured
     fi
 else
