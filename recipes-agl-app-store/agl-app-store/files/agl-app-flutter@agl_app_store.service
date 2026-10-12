@@ -5,17 +5,21 @@ Wants=agl-compositor.service network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/flutter-auto --b=/usr/share/flutter/agl_app_store --f
-Restart=on-failure
-RestartSec=5
+
+# FLUTTER_VERSION / FLUTTER_RUNTIME come from /etc/default/flutter,
+# shipped by agl-flutter-env.  They are part of the Flutter bundle
+# path, see the ExecStart line below.
+EnvironmentFile=-/etc/default/flutter
+Environment=XDG_RUNTIME_DIR=/run/user/1001/
+Environment=WAYLAND_DISPLAY=wayland-1
 
 # PATH — dart:io Process.run needs to find flatpak, systemctl, wget, curl, etc.
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# Wayland display for AGL compositor
+# The app is deliberately *not* run as agl-driver: it calls
+# `flatpak install/uninstall --system`, which needs privileges that a
+# non-interactive agl-driver session cannot obtain through polkit.
 Environment=HOME=/var
-Environment=XDG_RUNTIME_DIR=/run/user/1001
-Environment=WAYLAND_DISPLAY=wayland-1
 
 # Flatpak — system-wide app visibility (so `flatpak list` finds everything)
 Environment=XDG_DATA_DIRS=/var/lib/flatpak/exports/share:/usr/local/share:/usr/share
@@ -25,6 +29,12 @@ Environment=FLATPAK_SYSTEM_DIR=/var/lib/flatpak
 Environment=SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 Environment=SSL_CERT_DIR=/etc/ssl/certs
 Environment=CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+
+# Flutter bundle layout installed by the flutter-app class:
+#   /usr/share/flutter/<app>/<FLUTTER_VERSION>/<FLUTTER_RUNTIME>/
+ExecStart=/usr/bin/flutter-auto -b /usr/share/flutter/agl_app_store/${FLUTTER_VERSION}/${FLUTTER_RUNTIME} --xdg-shell-app-id agl_app_store
+Restart=on-failure
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target

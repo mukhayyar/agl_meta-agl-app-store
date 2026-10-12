@@ -2,10 +2,12 @@
 # agl-app-store-flatpak.inc
 # ============================================================
 # Include this in local.conf to enable Flatpak support for the
-# AGL App Store. Based on meta-flatpak/AGL branch guidelines.
+# AGL App Store. Flatpak/OSTree come from meta-oe in AGL trout.
 #
 # Prerequisites in bblayers.conf:
 #   BBLAYERS += "${METADIR}/external/meta-openembedded/meta-gnome"
+#     — meta-oe's flatpak_1.15.8.bb DEPENDS on dconf, which lives in
+#       meta-gnome. Without it flatpak fails to build.
 #
 # Usage in local.conf:
 #   include conf/distro/include/agl-app-store-flatpak.inc
@@ -15,17 +17,22 @@
 IMAGE_INSTALL:append = " flatpak agl-app-store"
 
 # Flatpak needs extra rootfs space for installed apps and runtimes
-# Adds 4GB — adjust based on target storage capacity
+# Adds ~4GB — adjust based on target storage capacity
 IMAGE_ROOTFS_EXTRA_SPACE:append = " + 4000000"
 
 # Ensure required distro features are enabled
+# polkit   — meta-oe's flatpak_1.15.8.bb sets REQUIRED_DISTRO_FEATURES =
+#            "polkit" and needs it for system-wide installs; the build
+#            fails without it.
 # wayland  — AGL compositor uses Wayland
-# seccomp  — Flatpak sandbox isolation
+# seccomp  — Flatpak sandbox isolation (flatpak PACKAGECONFIG[seccomp])
 # x11      — needed so xorgproto / libX11 / xwayland can build. Without
 #            it xwayland.bb is skipped and legacy GTK / wxWidgets /
 #            Qt-X11 flatpak apps (Filezilla, GIMP, LibreOffice, ...)
 #            can't render on AGL's Wayland-only compositor.
-DISTRO_FEATURES:append = " wayland seccomp x11"
+#            Having x11 in DISTRO_FEATURES also auto-enables flatpak's
+#            own `xauth` PACKAGECONFIG.
+DISTRO_FEATURES:append = " polkit wayland seccomp x11"
 
 # ── XWayland bridge ─────────────────────────────────────────
 # Build weston with its xwayland module compiled in. packagegroup-
