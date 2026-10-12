@@ -2,52 +2,53 @@
 # ============================================================
 # agl-store-refocus
 # ============================================================
-# Watches agl-compositor's app-state stream (via agl-shell-activator -l) and
-# re-activates the App Store whenever any *other* application terminates.
+# Belt-and-suspenders workaround so the App Store always comes back to the
+# foreground.
 #
 # Why: the AGL launcher starts an app with `systemctl start
-# agl-app-flutter@<id>.service`. That is a no-op when the instance is already
-# running (the store is almost always resident), so a store that ends up behind
-# another app never gets brought back to the foreground. Re-activating it
-# explicitly through agl-shell-activator works around that.
+# agl-app-flutter@<id>.service`, which is a no-op for an instance that is already
+# running -- and the store is resident almost all the time. So once another app
+# is placed on top, nothing brings the store back.
 #
-# The activator needs an output name for ActivateApp; it defaults to the
-# sole/first output itself (see the agl-shell-activator patch in this layer).
+# This watcher tails the journal for agl-shell's app-state events and, whenever
+# any *other* app reports state 1 (TERMINATED), re-activates the store through
+# agl-shell-activator. The activator is run as the AGL driver user, the same
+# identity the compositor expects for shell clients.
 # ============================================================
 
 STORE_ID="agl_app_store"
 ACTIVATOR="/usr/bin/agl-shell-activator"
+JOURNAL_MATCH="agl_shell_app_state"
+# Output to activate on. Leave empty to let agl-shell-activator pick the sole
+# output itself (it no longer requires -o).
+OUTPUT="${AGL_STORE_OUTPUT:-HDMI-A-1}"
 LOG_TAG="agl-store-refocus"
 
 log() { logger -t "${LOG_TAG}" "$*"; }
 
-log "watching compositor app-state stream for ${STORE_ID}"
+log "watching ${JOURNAL_MATCH} events (store=${STORE_ID}, output=${OUTPUT:-auto})"
 
-while :; do
-    "${ACTIVATOR}" -l 2>&1 | while read -r line; do
-        # Only react to app-state traffic ...
-        case "${line}" in
-            *app_id*) ;;
-            *) continue ;;
-        esac
+# -f follow, -o cat: message text only, -n 0: do not replay history on start.
+journalctl -f -o cat -n 0 2>/dev/null | while read -r line; do
+    case "${line}" in
+        *"${JOURNAL_MATCH}"*"app_state event app_id"*) ;;
+        *) continue ;;
+    esac
 
-        # ... and never to the store's own events.
-        case "${line}" in
-            *"${STORE_ID}"*) continue ;;
-        esac
+    app_id=$(printf '%s' "${line}" | sed -n 's/.*app_id=\([^ ]*\).*/\1/p')
+    state=$(printf '%s' "${line}" | sed -n 's/.*state=\([0-9]*\).*/\1/p')
 
-        # TERMINATED is what the compositor emits when a client goes away; that
-        # is the moment another app may have displaced the store.
-        case "${line}" in
-            *TERMINATED*|*DEACTIVATED*)
-                log "app left the foreground (${line}); reactivating ${STORE_ID}"
-                if ! "${ACTIVATOR}" -a activate -p "${STORE_ID}" >/dev/null 2>&1; then
-                    log "activation of ${STORE_ID} failed"
-                fi
-                ;;
-        esac
-    done
+    # state 1 == AGL_SHELL_APP_STATE_TERMINATED
+    [ "${state}" = "1" ] || continue
+    [ "${app_id}" = "${STORE_ID}" ] && continue
 
-    log "activator listener exited; restarting in 5s"
-    sleep 5
+    log "app '${app_id}' terminated; re-activating ${STORE_ID}"
+
+    if [ -n "${OUTPUT}" ]; then
+        su agl-driver -s /bin/sh -c \
+            "${ACTIVATOR} -a activate -p ${STORE_ID} -o ${OUTPUT}" 2>&1
+    else
+        su agl-driver -s /bin/sh -c \
+            "${ACTIVATOR} -a activate -p ${STORE_ID}" 2>&1
+    fi
 done

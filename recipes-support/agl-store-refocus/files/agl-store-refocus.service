@@ -1,12 +1,14 @@
 [Unit]
-Description=Refocus the AGL PENS App Store after another application exits
-After=agl-compositor.service agl-app-flutter@agl_app_store.service
+Description=Refocus the AGL PENS App Store after another application terminates
+After=agl-compositor.service
 Wants=agl-compositor.service
 
 [Service]
 Type=simple
 ExecStart=/usr/bin/agl-store-refocus
-Restart=on-failure
+
+# The watcher must outlive anything the compositor does, so keep restarting it.
+Restart=always
 RestartSec=5
 
 [Install]
