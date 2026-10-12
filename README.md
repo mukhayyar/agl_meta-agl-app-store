@@ -13,6 +13,15 @@ This layer provides:
 3. **Pre-configured repositories** (`flatpak-predefined-repos.bb`) — registers **PENSHub** and **Flathub** on first boot with GPG verification
 4. **Platform integration** (`packagegroup-agl-demo-platform-flutter.bbappend`) — adds the app to the AGL IVI launcher
 5. **Distro include** (`agl-app-store-flatpak.inc`) — configures distro features and rootfs space for Flatpak
+6. **Crash fixes for the AGL UI stack** — `agl-compositor_git.bbappend` (SIGSEGV on surface
+   activation/deactivation churn) and `agl-shell-activator_%.bbappend` (abort on `activate`
+   without `-o`)
+7. **UI self-healing** (`agl-compositor-recovery`) — systemd drop-ins that survive a compositor
+   crash or watchdog kill without a reboot
+8. **Store refocus watchdog** (`agl-store-refocus`) — re-activates the App Store when another
+   app terminates (works around the launcher's no-op start of an already-running instance)
+9. **Flatpak enablement details** — `agl-flatpak-polkit-rule` (unattended system-wide installs)
+   and `x11-tmpdir` (`/tmp/.X11-unix` for X11 sandboxes)
 
 ## Directory Structure
 
@@ -190,6 +199,37 @@ recipe.
 - **trout** (Yocto 5.0 *scarthgap*, poky 5.0.15)
 -  Older layers were built against previous AGL releases; only trout is
   supported by this revision of the layer.
+
+## UI robustness fixes (recovered from the July 2026 build session)
+
+These were developed and validated on the AGL trout RPi4 build and re-created here
+after the original build tree was lost. All of them are opt-in at image level:
+
+```
+# local.conf
+INHERIT += "package-copy-nogtar"          # host tar 1.35 + pseudo workaround
+IMAGE_INSTALL:append = " agl-compositor-recovery agl-store-refocus x11-tmpdir"
+```
+
+| Path | What it fixes |
+|---|---|
+| `recipes-graphics/wayland/agl-compositor_git.bbappend` + `agl-compositor/files/0001-Fix-SIGSEGV-on-surface-activation-deactivation-churn.patch` | Reproducible SIGSEGV under launch/close + activate churn: use-after-free of `output->previous_active`, NULL `ivi_output` in `ivi_layout_deactivate()`, NULL shell resource in `shell_send_app_state()` |
+| `recipes-graphics/wayland/agl-shell-activator_%.bbappend` + `.../files/0001-main-don-t-crash-on-activate-without-an-output.patch` | `agl-shell-activator -a activate` aborted with `std::logic_error` when no `-o` was given; now defaults to the sole/first output |
+| `recipes-graphics/wayland/agl-compositor-recovery/` | Drop-ins that self-heal the UI after a compositor crash or watchdog kill (no reboot): `Restart=on-failure` + home-screen re-bind, flutter template bound to the compositor lifecycle, App Store instance `Restart=always` |
+| `recipes-support/agl-store-refocus/` | Watches the compositor app-state stream and re-activates the App Store whenever another app terminates (the launcher's `systemctl start` is a no-op for an already-running instance) |
+| `recipes-flatpak/agl-flatpak-polkit-rule/` | Polkit rule authorising `org.freedesktop.Flatpak.*` for `agl-driver`/root, so the store can install system-wide Flatpaks from a systemd unit with no polkit agent |
+| `recipes-graphics/x11-tmpdir/` | Recreates `/tmp/.X11-unix` at boot so Flatpak X11 sandboxes (`--socket=x11`) can bind it |
+| `classes/package-copy-nogtar.bbclass` | Host workaround: GNU tar 1.35 breaks `perform_packagecopy()` under pseudo 1.9.0 (`mkdirat` EFAULT); copies with `cp -a --sparse=always` instead |
+
+Both patches were verified to apply cleanly to the revisions trout pins:
+`agl-compositor` `cea35f44d1e60ed2d67c6556eba6b7777d5f66ce` and
+`agl-shell-activator` `027d6f814f3d1f2e6b4b4071365b28dadec34109`.
+
+The matching application-side fix lives in
+[`flutter-agl`](https://github.com/mukhayyar/flutter-agl):
+`lib/data/data_providers/app_launcher.dart` now resolves the compositor output
+(`GetOutputs`) and passes it to `ActivateApp`, without which activation is a
+silent no-op.
 
 ## Author
 

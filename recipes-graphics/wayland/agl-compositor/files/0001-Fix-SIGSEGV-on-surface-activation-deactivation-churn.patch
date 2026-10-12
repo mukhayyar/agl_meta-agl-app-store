@@ -1,0 +1,99 @@
+From 8ab67386c665d440477cd40deea7894218e62b15 Mon Sep 17 00:00:00 2001
+From: AGL RPi4 image maintainer <m3g3nz2@gmail.com>
+Date: Thu, 9 Jul 2026 00:00:00 +0000
+Subject: [PATCH] Fix SIGSEGV on surface activation/deactivation churn
+
+agl-compositor crashes (SIGSEGV, core-dumped) under heavy surface-activation
+churn -- launching/closing xdg-shell apps in quick succession plus repeated
+agl-shell-activator activate calls. Three unguarded dereferences on the
+activate/deactivate/app-state path are responsible:
+
+1. desktop.c: desktop_surface_removed() frees an ivi_surface but only clears
+   output->active for the surface's current output; output->previous_active
+   (and active on other outputs) is never cleared, leaving a dangling pointer
+   that is later dereferenced in ivi_layout_deactivate() and the TILE removal
+   branch -> use-after-free. Sweep all outputs and drop every reference before
+   free(). This is the primary fix.
+
+2. layout.c: ivi_layout_deactivate() dereferences ivi_output->previous_active
+   without checking ivi_output, which is NULL for a desktop/remote surface
+   that never got an output (the "Refusing to activate surface role 1 ...
+   type regular" case: both pending_output and last_output are NULL).
+
+3. shell.c: shell_send_app_state() calls wl_resource_get_version() on
+   ivi->shell_client.resource without a NULL check, unlike its sibling
+   shell_send_app_on_output(); the resource is NULL once the shell client
+   disconnects, so an app-state emission racing teardown crashes.
+
+No upstream commit fixes these (verified across all agl-compositor branches);
+this is a defensive backport candidate.
+
+Upstream-Status: Pending [reported to AGL; candidate for src/agl-compositor]
+Signed-off-by: AGL RPi4 image maintainer <m3g3nz2@gmail.com>
+---
+ src/desktop.c | 17 +++++++++++++++++
+ src/layout.c  |  8 ++++++--
+ src/shell.c   |  3 ++-
+ 3 files changed, 25 insertions(+), 3 deletions(-)
+
+diff --git a/src/desktop.c b/src/desktop.c
+index b327fe6..fc56fa9 100644
+--- a/src/desktop.c
++++ b/src/desktop.c
+@@ -371,6 +371,23 @@ skip_output_asignment:
+ 			shell_send_app_state(output->ivi, app_id, AGL_SHELL_APP_STATE_TERMINATED);
+ 	}
+ 
++	/* The surface is about to be freed. desktop_surface_removed() above only
++	 * clears output->active for the surface's *current* output and never
++	 * touches output->previous_active at all, so any output still pointing
++	 * at this surface (as active or previous_active) is left with a dangling
++	 * pointer -- later dereferenced in ivi_layout_deactivate() and in the
++	 * TILE branch above, causing a use-after-free / SIGSEGV under rapid
++	 * launch/close + activate churn. Drop every reference before free(). */
++	{
++		struct ivi_output *o;
++		wl_list_for_each(o, &surface->ivi->outputs, link) {
++			if (o->active == surface)
++				o->active = NULL;
++			if (o->previous_active == surface)
++				o->previous_active = NULL;
++		}
++	}
++
+ 	wl_list_remove(&surface->link);
+ 
+ 	free(surface);
+diff --git a/src/layout.c b/src/layout.c
+index 7ef8adf..3ccb7f5 100644
+--- a/src/layout.c
++++ b/src/layout.c
+@@ -1279,8 +1279,12 @@ ivi_layout_deactivate(struct ivi_compositor *ivi, const char *app_id)
+ 	weston_log("Deactiving %s, role %s\n", app_id,
+ 			ivi_layout_get_surface_role_name(surf));
+ 
+-	if (surf->role == IVI_SURFACE_ROLE_DESKTOP ||
+-	    surf->role == IVI_SURFACE_ROLE_REMOTE) {
++	/* ivi_output may be NULL for a desktop/remote surface that never got an
++	 * output assigned (e.g. one that hit the "Refusing to activate" path and
++	 * has both pending_output and last_output NULL); guard the deref. */
++	if (ivi_output &&
++	    (surf->role == IVI_SURFACE_ROLE_DESKTOP ||
++	     surf->role == IVI_SURFACE_ROLE_REMOTE)) {
+ 		struct ivi_surface *previous_active;
+ 
+ 		previous_active = ivi_output->previous_active;
+diff --git a/src/shell.c b/src/shell.c
+index d8a4a0a..c009a75 100644
+--- a/src/shell.c
++++ b/src/shell.c
+@@ -1028,7 +1028,8 @@ void
+ shell_send_app_state(struct ivi_compositor *ivi, const char *app_id,
+ 		     enum agl_shell_app_state state)
+ {
+-	if (app_id && wl_resource_get_version(ivi->shell_client.resource) >=
++	if (app_id && ivi->shell_client.resource &&
++	    wl_resource_get_version(ivi->shell_client.resource) >=
+ 	    AGL_SHELL_APP_STATE_SINCE_VERSION) {
+ 
+ 		agl_shell_send_app_state(ivi->shell_client.resource,

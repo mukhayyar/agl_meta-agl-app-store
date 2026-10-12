@@ -56,6 +56,7 @@ DEPENDS += " \
 RDEPENDS:${PN} += " \
     packagegroup-flatpak \
     flatpak-predefined-repos \
+    agl-flatpak-polkit-rule \
 "
 
 # ── systemd unit ─────────────────────────────────────────────

@@ -1,0 +1,76 @@
+From 2dd6f228d4bacda48d4d6d2c029e27140cd5fd46 Mon Sep 17 00:00:00 2001
+From: AGL RPi4 image maintainer <m3g3nz2@gmail.com>
+Date: Thu, 9 Jul 2026 00:00:00 +0000
+Subject: [PATCH] main: don't crash on activate without an output
+
+`agl-shell-activator -a activate -p <app_id>` without `-o <output>` aborted:
+
+  terminate called after throwing an instance of 'std::logic_error'
+    what():  basic_string::_M_construct null not valid
+
+The ACTIVATE branch validated `!output && !app_id` (should be ||), so an
+app_id without an output fell through to std::string(output) with a NULL
+pointer. Even with the check fixed, the compositor cannot place the surface
+without a valid output_name, so the activate is a silent no-op -- which is
+what made the home screen's ActivateApp calls do nothing after a compositor
+restart.
+
+Make -o optional: when it is missing (or empty) query the compositor for its
+outputs and fall back to the sole/first one, warning when the choice is
+ambiguous. Bail out with usage only when the compositor reports no output at
+all.
+
+Upstream-Status: Pending [reported to AGL; candidate for src/agl-shell-activator]
+Signed-off-by: AGL RPi4 image maintainer <m3g3nz2@gmail.com>
+---
+ src/main.cpp | 31 ++++++++++++++++++++++++++++---
+ 1 file changed, 28 insertions(+), 3 deletions(-)
+
+diff --git a/src/main.cpp b/src/main.cpp
+index 555e5a3..6cfdcb8 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -200,15 +200,40 @@ int main(int argc, char *argv[])
+ 	}
+ 
+ 	switch (get_action(action)) {
+-	case ACTIVATE:
+-		if (!output && !app_id) {
+-			fprintf(stderr, "Activation require both an app_id and an output\n");
++	case ACTIVATE: {
++		/* -o is optional now. ActivateApp() hands the output name straight
++		 * to the compositor, so a NULL/empty one used to either abort on
++		 * std::string(NULL) (std::logic_error) or make the compositor
++		 * silently ignore the request. Fall back to the sole/first output
++		 * the compositor reports instead of crashing. */
++		std::string default_output;
++
++		if (!app_id) {
++			fprintf(stderr, "Activation require an app_id\n");
+ 			help(argv);
+ 		}
++
++		if (!output || !output[0]) {
++			std::vector<std::string> outputs = client->GetOutputs();
++
++			if (outputs.empty()) {
++				fprintf(stderr, "Activation requires an output, and the compositor reports none\n");
++				help(argv);
++			}
++
++			default_output = outputs[0];
++			output = &default_output[0];
++
++			if (outputs.size() > 1)
++				fprintf(stderr, "No output given, %zu outputs available, using '%s'\n",
++						outputs.size(), output);
++		}
++
+ 		fprintf(stderr, "Activating application '%s' on output '%s'\n",
+ 				app_id, output);
+ 		client->ActivateApp(std::string(app_id), std::string(output));
+ 		break;
++	}
+ 	case DEACTIVATE:
+ 		if (!app_id) {
+ 			fprintf(stderr, "Deactivation require an app_id\n");
