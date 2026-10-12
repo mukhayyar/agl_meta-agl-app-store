@@ -7,7 +7,7 @@ LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda
 
 SRC_URI = " \
     file://setup-flatpak-repos.sh \
-    file://penshub-public.gpg \
+    file://penshub.gpg \
 "
 
 RDEPENDS:${PN} = "flatpak"
@@ -17,11 +17,13 @@ do_install() {
     install -d ${D}${bindir}
     install -m 0755 ${WORKDIR}/setup-flatpak-repos.sh ${D}${bindir}/setup-flatpak-repos
 
-    # Install the bundled PENSHub GPG public key so first-boot setup
-    # does not depend on network access to fetch the key.
-    install -d ${D}${datadir}/flatpak-predefined-repos
-    install -m 0644 ${WORKDIR}/penshub-public.gpg \
-        ${D}${datadir}/flatpak-predefined-repos/penshub-public.gpg
+    # Install the bundled PENSHub GPG public key (E9ADCFFF97CE5264) so first-boot
+    # setup does not depend on network access to fetch the key, and so the App
+    # Store can repair a broken remote from the same file. Path is fixed:
+    # /usr/share/flatpak-repos/penshub.gpg.
+    install -d ${D}${datadir}/flatpak-repos
+    install -m 0644 ${WORKDIR}/penshub.gpg \
+        ${D}${datadir}/flatpak-repos/penshub.gpg
 
     # Install systemd oneshot service to run on first boot
     install -d ${D}${systemd_system_unitdir}
@@ -49,6 +51,6 @@ SYSTEMD_AUTO_ENABLE = "enable"
 
 FILES:${PN} += " \
     ${bindir}/setup-flatpak-repos \
-    ${datadir}/flatpak-predefined-repos/penshub-public.gpg \
+    ${datadir}/flatpak-repos/penshub.gpg \
     ${systemd_system_unitdir}/flatpak-repos-setup.service \
 "
