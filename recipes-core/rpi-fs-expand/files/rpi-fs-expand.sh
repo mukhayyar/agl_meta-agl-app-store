@@ -39,14 +39,20 @@ PART=$(echo "${ROOT_SRC}" | sed -E 's/^.*p?([0-9]+)$/\1/')
 
 echo "rpi-fs-expand: growing ${DISK} partition ${PART} (${ROOT_SRC})"
 
-# growpart exits non-zero when there is nothing left to grow -- that is a
-# success for us (card already fully used).
-if ! growpart "${DISK}" "${PART}"; then
-    echo "rpi-fs-expand: growpart reported no change (partition already at end of disk)"
+# Prefer growpart when the image happens to ship it (cloud-utils-growpart is
+# not part of the AGL manifest), otherwise use parted, which is. Both exit
+# non-zero when there is nothing left to grow -- that is a success for us.
+if command -v growpart >/dev/null 2>&1; then
+    growpart "${DISK}" "${PART}" || \
+        echo "rpi-fs-expand: growpart reported no change (partition already at end of disk)"
+else
+    parted -s "${DISK}" resizepart "${PART}" 100% || \
+        echo "rpi-fs-expand: parted reported no change (partition already at end of disk)"
 fi
 
 # Re-read the partition table so the kernel sees the new size before resizing.
 partx -u "${ROOT_SRC}" 2>/dev/null || blockdev --rereadpt "${DISK}" 2>/dev/null || true
+partprobe "${DISK}" 2>/dev/null || true
 
 if resize2fs "${ROOT_SRC}"; then
     echo "rpi-fs-expand: filesystem grown"

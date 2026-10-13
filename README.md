@@ -229,7 +229,7 @@ trout tree: `INHERIT` leaves `linux-libc-headers:do_package` failing with
 | `recipes-flatpak/flatpak-predefined-repos/` | First-boot service: Flathub via `.flatpakrepo`, PENSHub via `--gpg-import` of the baked key `/usr/share/flatpak-repos/penshub.gpg` (no `--no-gpg-verify` anywhere), `remote "penshub".gpg-verify-summary=false`, and `org.gnome.Platform//45` (the runtime PENSHub apps are built against) |
 | `recipes-graphics/x11-tmpdir/` | Recreates `/tmp/.X11-unix` at boot so Flatpak X11 sandboxes (`--socket=x11`) can bind it |
 | `recipes-support/wifi-connect-helper/` | setuid C shim + root script (`/usr/bin/wifi-connect-helper` 4755 → `/usr/libexec/wifi-connect-helper.sh`) so the agl-driver UI can scan/connect/disconnect via ConnMan, which is root-only; also removes competing `wifi_*.config` (the "2 WiFi connected / no internet" bug) and writes the hex-SSID provisioning config for auto-connect |
-| `recipes-core/rpi-fs-expand/` | First-boot oneshot (`growpart` + online `resize2fs`, flag-guarded, unit + `98-rpi-fs-expand.preset`) so a 32/64 GB card is fully usable instead of the fixed ~3-4 GB rootfs |
+| `recipes-core/rpi-fs-expand/` | First-boot oneshot (`parted`/`growpart` + online `resize2fs`, flag-guarded, unit + `98-rpi-fs-expand.preset`) so a 32/64 GB card is fully usable instead of the fixed ~3-4 GB rootfs |
 | `recipes-bsp/bootfiles/rpi-config_git.bbappend` | `RPI_EXTRA_CONFIG` → `hdmi_cvt=1920 1080 60 6 0 0 0` in config.txt, pinning the 1080p mode the AGL UI is laid out for |
 | `classes/package-copy-nogtar.bbclass` | Host workaround: GNU tar 1.35 breaks `perform_packagecopy()` under pseudo 1.9.0 (`mkdirat` EFAULT); copies with `cp -a --sparse=always` instead |
 

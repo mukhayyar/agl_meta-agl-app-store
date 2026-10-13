@@ -13,8 +13,9 @@ SRC_URI = " \
     file://98-rpi-fs-expand.preset \
 "
 
-# growpart does the partition table work, resize2fs grows the filesystem.
-RDEPENDS:${PN} += "cloud-utils-growpart e2fsprogs-resize2fs"
+# parted grows the partition table entry (cloud-utils-growpart is not in the AGL
+# trout manifest), resize2fs grows the filesystem online.
+RDEPENDS:${PN} += "parted e2fsprogs-resize2fs"
 
 inherit systemd
 SYSTEMD_SERVICE:${PN} = "rpi-fs-expand.service"
