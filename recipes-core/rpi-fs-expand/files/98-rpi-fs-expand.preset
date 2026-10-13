@@ -1,0 +1,2 @@
+# Enable the first-boot rootfs expansion (applied by systemctl preset-all).
+enable rpi-fs-expand.service

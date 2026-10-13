@@ -1,0 +1,22 @@
+[Unit]
+Description=Expand the root filesystem to fill the SD card (first boot only)
+Documentation=https://github.com/mukhayyar/agl_meta-agl-app-store
+# The rootfs must be mounted; the script then grows it online.
+After=local-fs.target
+Wants=local-fs.target
+# Skip entirely once the flag has been written by a previous run.
+ConditionPathExists=!/var/lib/rpi-fs-expanded
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/rpi-fs-expand
+# Growing a mounted filesystem is quick, but a slow/corrupt card should not
+# hold up the rest of the boot for ever.
+TimeoutStartSec=180
+# Failure is not fatal: the system is usable with the smaller rootfs and the
+# service retries on the next boot because the flag is only written on success.
+SuccessExitStatus=0
+
+[Install]
+WantedBy=multi-user.target
