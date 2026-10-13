@@ -243,6 +243,35 @@ The matching application-side fix lives in
 (`GetOutputs`) and passes it to `ActivateApp`, without which activation is a
 silent no-op.
 
+## Toradex Apalis i.MX8 target
+
+The machine template lives in this layer (`templates/machine/apalis-imx8/`), so
+`aglsetup.sh` picks it up wherever the layer is cloned under `METADIR`. The
+Toradex BSP layers are **not** part of the AGL manifest and have to be added
+once:
+
+```bash
+cd ~/AGL   # METADIR
+git clone -b scarthgap-7.x.y https://git.toradex.com/meta-toradex-nxp.git         bsp/meta-toradex-nxp
+git clone -b scarthgap-7.x.y https://git.toradex.com/meta-toradex-bsp-common.git  bsp/meta-toradex-bsp-common
+
+source meta-agl/scripts/aglsetup.sh -m apalis-imx8 -b build-apalis-imx8 agl-demo agl-devel
+bitbake-layers add-layer ../agl_meta-agl-app-store     # brings the template + AGL fixups
+bitbake agl-ivi-demo-flutter
+```
+
+`40_bblayers.conf.inc` adds meta-freescale, meta-freescale-3rdparty,
+meta-toradex-bsp-common and meta-toradex-nxp; `50_setup.sh` accepts the NXP EULA;
+`conf/include/agl_apalis-imx8.inc` carries the AGL graphics/multimedia pins
+(mirroring `agl_imx8mq-evk.inc` for the `mx8qm` override chain).
+
+Note: that include is a reconstruction — the July session's copy survived only
+as its header plus the `require agl_imx-common.inc` line (the rest was lost with
+the build tree), so the pin list was rebuilt from `agl_imx8mq-evk.inc` with the
+`mx8qm` overrides taken from meta-freescale's `imx-base.inc`. It parses against
+meta-toradex-nxp `scarthgap-7.x.y`, but a hardware bring-up is still the only
+real validation.
+
 ## Author
 
 Muhammad Tsaqif Mukhayyar — Politeknik Elektronika Negeri Surabaya (PENS)
