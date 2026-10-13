@@ -207,9 +207,15 @@ after the original build tree was lost. All of them are opt-in at image level:
 
 ```
 # local.conf
-INHERIT += "package-copy-nogtar"          # host tar 1.35 + pseudo workaround
+USER_CLASSES += "package-copy-nogtar"     # host tar 1.35 + pseudo workaround
 IMAGE_INSTALL:append = " agl-compositor-recovery agl-store-refocus x11-tmpdir"
 ```
+
+(The tar workaround must be in `USER_CLASSES`, not `INHERIT`: `INHERIT` is
+expanded before `PACKAGE_CLASSES`, so `package_rpm`/`package.bbclass` would be
+inherited afterwards and its `perform_packagecopy()` would win. Verified on a
+trout tree: `INHERIT` leaves `linux-libc-headers:do_package` failing with
+`tar: ./usr/include: Cannot mkdir: Bad address`, `USER_CLASSES` fixes it.)
 
 | Path | What it fixes |
 |---|---|

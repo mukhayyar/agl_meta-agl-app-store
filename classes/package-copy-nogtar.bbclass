@@ -16,13 +16,17 @@
 # ownership; --sparse=always keeps sparse files sparse; we then drop the
 # sysroot-only staging dir the original tar excluded.
 #
-# Remove this class (and the INHERIT in local.conf) once pseudo is updated to
-# handle tar 1.35, or the host tar is downgraded.
+# Remove this class (and the USER_CLASSES entry in local.conf) once pseudo is
+# updated to handle tar 1.35, or the host tar is downgraded.
 #
 # Usage (local.conf):
-#     INHERIT += "package-copy-nogtar"
-# and add this layer's classes/ to BB_CLASSES/BBCLASSEXTEND search via the
-# layer being in bblayers.conf (BBPATH).
+#     USER_CLASSES += "package-copy-nogtar"
+#
+# It must go in USER_CLASSES, not INHERIT: INHERIT is expanded before
+# PACKAGE_CLASSES, so `package_rpm` (via package.bbclass) would be inherited
+# after this class and its perform_packagecopy() would win. Verified on a trout
+# tree with tar 1.35: with INHERIT the do_package failure below persists, with
+# USER_CLASSES linux-libc-headers:do_package completes and the log is clean.
 
 python perform_packagecopy () {
     import subprocess
